@@ -1,11 +1,11 @@
 import { View, Text } from 'react-native'
 import React, { useEffect, useState } from 'react'
 import { useLocalSearchParams, useNavigation } from 'expo-router'
-import {addDoc, collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
+import {addDoc, collection, doc, getDoc, onSnapshot, query, orderBy } from 'firebase/firestore'; 
 import { db } from './../../config/FirebaseConfig';
 import { useUser } from '@clerk/clerk-expo';
 import { GiftedChat } from 'react-native-gifted-chat'
-import moment from 'moment';
+import moment from 'moment'; // Make sure moment is installed: npm install moment
 
 export default function ChatScreen() {
   const params=useLocalSearchParams();
@@ -17,10 +17,16 @@ export default function ChatScreen() {
   useEffect(()=>{
     GetUserDetails();
 
-    const unsubscribe=onSnapshot(collection(db,'Chat',params?.id,'Messages'),(snapshot)=>{
+    // Create a query to order messages by createdAt in descending order
+    // Firebase will sort these strings lexicographically, which works for this format.
+    const q = query(collection(db,'Chat',params?.id,'Messages'), orderBy('createdAt', 'desc'));
+
+    const unsubscribe=onSnapshot(q,(snapshot)=>{ 
       const messageData=snapshot.docs.map((doc)=>({
         _id:doc.id,
-        ...doc.data()
+        ...doc.data(),
+        // Convert the string 'createdAt' back to a Date object for GiftedChat
+        createdAt: moment(doc.data().createdAt, 'YYYY-MM-DD HH:mm:ss').toDate() 
       }))
       setMessages(messageData)
     });
@@ -41,8 +47,12 @@ export default function ChatScreen() {
   }
 
   const onSend=async(newMessage)=>{
-    setMessages((previousMessage)=>GiftedChat.append(previousMessage,newMessage));
-    newMessage[0].createdAt=moment().format('YYYY-MM-DD HH:mm:ss');
+    // GiftedChat's append already handles adding new messages to the beginning
+    setMessages((previousMessage)=>GiftedChat.append(previousMessage,newMessage)); 
+    
+    // Format the createdAt time as a string before sending to Firebase
+    newMessage[0].createdAt=moment().format('YYYY-MM-DD HH:mm:ss'); 
+    
     await addDoc(collection(db,'Chat',params?.id,'Messages'),newMessage[0])
   }
 
